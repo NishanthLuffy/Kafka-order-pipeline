@@ -1,6 +1,10 @@
 package com.nishanthr.pipeline.enrichment;
 
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
+
 import java.util.Map;
 
 /**
@@ -13,7 +17,7 @@ import java.util.Map;
 @Service
 public class EnrichmentService {
 
-    private static final com.nishanthr.pipeline.enrichment.Logger log = LoggerFactory.getLogger(EnrichmentService.class);
+//    private static final com.nishanthr.pipeline.enrichment.Logger log = LoggerFactory.getLogger(EnrichmentService.class);
 
     // Stub supplier mappings — replace with real MDM calls
     private static final Map<String, String> ITEM_SUPPLIER_MAP = Map.of(
@@ -28,18 +32,19 @@ public class EnrichmentService {
             "ITEM-456", "DC-002",
             "ITEM-789", "DC-001"
     );
+    private static final Logger log = LoggerFactory.getLogger(EnrichmentService.class);
 
     public String resolveSupplier(String itemId) {
         String supplierId = ITEM_SUPPLIER_MAP.get(itemId);
         if (supplierId == null) {
-            log.warn("No supplier found for item: {}", itemId);
+            log.info("No supplier found for item: {}", itemId);
         }
         return supplierId;
     }
 
     public String resolveLocation(String itemId, String channel) {
         String locationId = ITEM_LOCATION_MAP.get(itemId);
-        log.debug("Resolved location [item={}, channel={}, location={}]", itemId, channel, locationId);
+       log.info("Resolved location for item {} in channel {}: {}", itemId, channel, locationId);
         return locationId;
     }
 }
