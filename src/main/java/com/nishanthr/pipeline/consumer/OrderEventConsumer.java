@@ -1,6 +1,9 @@
 package com.nishanthr.pipeline.consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.nishanthr.pipeline.model.FailedMessage;
 import com.nishanthr.pipeline.model.OrderEvent;
+import com.nishanthr.pipeline.persistence.FailedMessageRepository;
 import com.nishanthr.pipeline.strategy.EventProcessorRegistry;
 import com.nishanthr.pipeline.strategy.OrderProcessingStrategy;
 import org.slf4j.Logger;
@@ -11,24 +14,21 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
-
-
-/**
- * Kafka consumer — entry point for all incoming order events.
- *
- * Resolves the correct processing strategy from the registry
- * using the event's composite key, then delegates enrichment,
- * validation, and processing to that strategy.
- */
 @Component
 public class OrderEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(OrderEventConsumer.class);
 
     private final EventProcessorRegistry registry;
+    private final FailedMessageRepository failedMessageRepository;
+    private final ObjectMapper objectMapper;
 
-    public OrderEventConsumer(EventProcessorRegistry registry) {
+    public OrderEventConsumer(EventProcessorRegistry registry,
+                              FailedMessageRepository failedMessageRepository,
+                              ObjectMapper objectMapper) {
         this.registry = registry;
+        this.failedMessageRepository = failedMessageRepository;
+        this.objectMapper = objectMapper;
     }
 
     @KafkaListener(
@@ -38,16 +38,19 @@ public class OrderEventConsumer {
     public void consume(
             @Payload OrderEvent event,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
-            @Header(KafkaHeaders.OFFSET) long offset
-    ) throws Exception {
+            @Header(KafkaHeaders.OFFSET) long offset,
+            @Header(KafkaHeaders.RECEIVED_TOPIC) String topic
+    ) {
         log.info("Received order event [orderId={}, type={}, channel={}, partition={}, offset={}]",
                 event.getOrderId(), event.getOrderType(), event.getChannel(), partition, offset);
 
         String strategyKey = event.getStrategyKey();
 
+        // No strategy found — save to failed_messages immediately, no point retrying
         if (!registry.supports(strategyKey)) {
-            log.error("No strategy for key '{}' — routing to DLQ", strategyKey);
-            // In production: publish to DLQ topic
+            log.error("No strategy for key '{}' — saving to failed_messages", strategyKey);
+            saveToFailedMessages(event, topic, partition, offset,
+                    new IllegalArgumentException("No strategy registered for key: " + strategyKey));
             return;
         }
 
@@ -63,11 +66,34 @@ public class OrderEventConsumer {
                     event.getOrderId(), processedId);
 
         } catch (IllegalArgumentException e) {
+            // Validation failure — not retryable, save to failed_messages directly
             log.error("Validation failed for order [orderId={}]: {}", event.getOrderId(), e.getMessage());
-            // In production: publish to DLQ with error metadata
+            saveToFailedMessages(event, topic, partition, offset, e);
+
         } catch (Exception e) {
-            log.error("Unexpected error processing order [orderId={}]", event.getOrderId(), e);
-            throw e; // Re-throw so Kafka retries via retry policy
+            // Transient failure — re-throw so KafkaConsumerConfig retries 3 times
+            // After 3 retries the recoverer in KafkaConsumerConfig saves to failed_messages
+            log.error("Transient error processing order [orderId={}] — triggering retry",
+                    event.getOrderId(), e);
+            throw e;
+        }
+    }
+
+    private void saveToFailedMessages(OrderEvent event, String topic,
+                                      int partition, long offset, Exception e) {
+        try {
+            if (failedMessageRepository.existsByEventId(event.getEventId())) {
+                log.warn("Event {} already in failed_messages — skipping", event.getEventId());
+                return;
+            }
+            String payload = objectMapper.writeValueAsString(event);
+            FailedMessage fm = FailedMessage.of(event, payload, e, 0, topic, partition, offset);
+            failedMessageRepository.save(fm);
+            log.info("Saved to failed_messages [orderId={}, reason={}]",
+                    event.getOrderId(), e.getMessage());
+        } catch (Exception ex) {
+            log.error("CRITICAL: Could not save to failed_messages [orderId={}]",
+                    event.getOrderId(), ex);
         }
     }
 }
