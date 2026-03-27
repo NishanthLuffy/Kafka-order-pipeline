@@ -57,6 +57,15 @@
       <recent name="com.nishanthr.pipeline.enrichment" />
     </key>
   </component>
+  <component name="RunManager">
+    <configuration name="KafkaPipelineApplication" type="SpringBootApplicationConfigurationType" factoryName="Spring Boot" nameIsGenerated="true">
+      <module name="kafka-order-pipeline" />
+      <option name="SPRING_BOOT_MAIN_CLASS" value="com.nishanthr.pipeline.KafkaPipelineApplication" />
+      <method v="2">
+        <option name="Make" enabled="true" />
+      </method>
+    </configuration>
+  </component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
@@ -74,7 +83,7 @@
       <option name="presentableId" value="Default" />
       <updated>1774626918660</updated>
       <workItem from="1774626919920" duration="2734000" />
-      <workItem from="1774636739519" duration="1768000" />
+      <workItem from="1774636739519" duration="2466000" />
     </task>
     <servers />
   </component>
