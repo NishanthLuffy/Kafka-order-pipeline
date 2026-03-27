@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS processed_orders (
                                                 processed_id    VARCHAR(36)     PRIMARY KEY,
+    event_id        VARCHAR(36)     NOT NULL UNIQUE,  -- idempotency key
     order_id        VARCHAR(100)    NOT NULL,
     order_type      VARCHAR(50)     NOT NULL,
     channel         VARCHAR(50)     NOT NULL,
@@ -11,6 +12,9 @@ CREATE TABLE IF NOT EXISTS processed_orders (
 
 CREATE INDEX IF NOT EXISTS idx_processed_orders_order_id
     ON processed_orders(order_id);
+
+CREATE INDEX IF NOT EXISTS idx_processed_orders_event_id
+    ON processed_orders(event_id);
 
 CREATE INDEX IF NOT EXISTS idx_processed_orders_order_type
     ON processed_orders(order_type, channel);
@@ -47,15 +51,3 @@ CREATE INDEX IF NOT EXISTS idx_failed_messages_order_id
 
 CREATE INDEX IF NOT EXISTS idx_failed_messages_failed_at
     ON failed_messages(failed_at DESC);
-```
-
----
-
-**Folder structure reminder — where each file goes:**
-```
-config/         → KafkaConsumerConfig.java
-model/          → FailedMessage.java
-persistence/    → FailedMessageRepository.java
-consumer/       → RedriveService.java
-producer/       → FailedMessageController.java
-resources/      → schema.sql (replace existing)

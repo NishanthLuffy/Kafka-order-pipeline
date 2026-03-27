@@ -2,6 +2,11 @@ spring:
   application:
     name: kafka-order-pipeline
 
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
   datasource:
     url: jdbc:postgresql://localhost:5432/orders
     username: pipeline
@@ -10,11 +15,16 @@ spring:
 
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:
         dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -26,6 +36,7 @@ spring:
     consumer:
       group-id: order-processor-group
       auto-offset-reset: earliest
+      enable-auto-commit: false
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
@@ -35,9 +46,10 @@ kafka:
   topics:
     order-events: order-events
     order-processed: order-processed
-    order-dlq: order-events-dlq
 
 app:
   processing:
     chunk-size: 500
     max-retries: 3
+  cache:
+    enrichment-ttl-minutes: 60

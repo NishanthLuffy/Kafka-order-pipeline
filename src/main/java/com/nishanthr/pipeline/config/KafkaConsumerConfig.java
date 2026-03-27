@@ -57,6 +57,9 @@ public class KafkaConsumerConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, groupId);
         props.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
 
+        // Disable auto commit — we will manually ack after successful processing
+        props.put(ConsumerConfig.ENABLE_AUTO_COMMIT_CONFIG, false);
+
         JsonDeserializer<OrderEvent> deserializer = new JsonDeserializer<>(OrderEvent.class);
         deserializer.setRemoveTypeHeaders(false);
         deserializer.addTrustedPackages("*");
@@ -74,7 +77,11 @@ public class KafkaConsumerConfig {
         ConcurrentKafkaListenerContainerFactory<String, OrderEvent> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory());
-        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.RECORD);
+
+        // MANUAL_IMMEDIATE — ack is called explicitly in the consumer
+        // offset is only committed when you call acknowledgment.acknowledge()
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+
         factory.setCommonErrorHandler(errorHandler());
         return factory;
     }
@@ -100,12 +107,10 @@ public class KafkaConsumerConfig {
                         }
 
                         String payload = mapper.writeValueAsString(event);
-
                         FailedMessage failedMessage = FailedMessage.of(
                                 event, payload, exception, (int) MAX_ATTEMPTS,
                                 record.topic(), record.partition(), record.offset()
                         );
-
                         failedMessageRepository.save(failedMessage);
 
                         log.info("Saved to failed_messages [eventId={}, orderId={}]",
